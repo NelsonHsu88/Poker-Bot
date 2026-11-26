@@ -84,6 +84,36 @@ def cmd_charts(args):
     _table(rows)
 
 
+def cmd_evolve(args):
+    import json
+    import shutil
+    from pathlib import Path
+
+    from .charts import evolution_chart
+    from .evolve import evolve
+    from .strategy import MODEL_PATH
+
+    champion, history, meta = evolve(
+        population=args.population,
+        generations=args.generations,
+        hands=args.hands,
+        seed=args.seed,
+        out=args.out,
+    )
+    Path(args.out, "history.json").write_text(json.dumps(history))
+    evolution_chart(Path(args.out) / "evolution.png", history)
+    print(f"model, history and chart written to {args.out}")
+    if args.install:
+        shutil.copy(Path(args.out) / "evolved.json", MODEL_PATH)
+        print(f"installed as the 'evolved' bot ({MODEL_PATH})")
+
+
+def cmd_benchmark(args):
+    from .simulate import benchmark
+
+    _table(benchmark(args.bot, args.baselines, args.opponents, args.hands, args.workers, args.seed))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="pokerbot", description="Poker AI playground")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -126,6 +156,24 @@ def main(argv=None):
     c.add_argument("--iterations", type=int, default=20_000_000)
     c.add_argument("--sweep-iterations", type=int, default=10_000_000)
     c.set_defaults(func=cmd_charts)
+
+    g = sub.add_parser("evolve", help="train a bot with a genetic algorithm over a large population")
+    g.add_argument("--population", type=int, default=10_000)
+    g.add_argument("--generations", type=int, default=50)
+    g.add_argument("--hands", type=int, default=250, help="hands per kind of table per generation (each bot plays 3x this)")
+    g.add_argument("--seed", type=int, default=0)
+    g.add_argument("--out", default="runs/evolve", help="checkpoint directory; rerunning resumes from it")
+    g.add_argument("--install", action="store_true", help="copy the champion to pokerbot/data/evolved.json")
+    g.set_defaults(func=cmd_evolve)
+
+    b = sub.add_parser("benchmark", help="a bot vs held-out opponents, next to baseline bots at the same tables")
+    b.add_argument("bot", nargs="?", default="evolved", choices=sorted(BOTS))
+    b.add_argument("--baselines", nargs="*", default=["tag"], choices=sorted(BOTS))
+    b.add_argument("--opponents", nargs="+", default=["tag", "rock", "maniac", "station", "math", "random"], choices=sorted(BOTS))
+    b.add_argument("-n", "--hands", type=int, default=200_000)
+    b.add_argument("-w", "--workers", type=int, default=4)
+    b.add_argument("--seed", type=int, default=0)
+    b.set_defaults(func=cmd_benchmark)
 
     args = p.parse_args(argv)
     args.func(args)

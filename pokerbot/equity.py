@@ -10,6 +10,11 @@ from .evaluator import evaluate
 @njit(cache=True)
 def _equity_mc(known, board, n_random, iterations, seed):
     np.random.seed(seed)
+    return _equity_core(known, board, n_random, iterations)
+
+
+@njit(cache=True)
+def _equity_core(known, board, n_random, iterations):
     n_known = known.shape[0] // 2
     n_board = board.shape[0]
     used = np.zeros(52, np.bool_)

@@ -1,0 +1,29 @@
+{
+  "genes": {
+    "pf_raise": 0.86636,
+    "pf_reraise_step": 0.51612,
+    "pf_call": 1.95669,
+    "pf_call_raised": 0.84859,
+    "position": -0.08802,
+    "bet": 0.99961,
+    "bluff": 0.19565,
+    "raise": 1.81556,
+    "call_margin": 0.12223,
+    "raised_margin": 0.09286
+  },
+  "population": 10000,
+  "generations": 50,
+  "hands_per_bot_per_generation": 750,
+  "seed": 0,
+  "playoff_bb100": {
+    "final population": 37.8,
+    "hall of fame": 50.9,
+    "random bots": 68.1,
+    "station": 159.3,
+    "maniac": 188.2,
+    "rock": 54.0,
+    "tag": 37.7,
+    "math": 58.6
+  },
+  "playoff_hands_per_matchup": 40000
+}

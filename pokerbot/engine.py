@@ -25,6 +25,7 @@ POSTFLOP_SAMPLES = 200
 @dataclass
 class Observation:
     position: int
+    num_players: int
     hole: tuple
     board: tuple
     street: int
@@ -103,6 +104,7 @@ def play_hand(bots, button: int, rng: random.Random) -> HandResult:
                 to_call = current - street_bets[seat]
                 obs = Observation(
                     position=(seat - button) % n,
+                    num_players=n,
                     hole=holes[seat],
                     board=board,
                     street=street,

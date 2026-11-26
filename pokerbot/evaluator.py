@@ -1,4 +1,3 @@
-import numpy as np
 from numba import njit
 
 CATEGORIES = (
@@ -46,66 +45,89 @@ def _top_ranks(mask, n):
 
 
 @njit(cache=True)
+def _high_bit(mask):
+    r = 12
+    while r >= 0:
+        if (mask >> r) & 1:
+            return r
+        r -= 1
+    return -1
+
+
+@njit(cache=True)
 def evaluate(cards):
     """Strength of the best 5-card hand in 5 to 7 cards; higher is better.
 
     Cards are ints 0..51 with rank = c >> 2 (0 is a deuce, 12 an ace) and suit = c & 3.
-    The result is category << 20 | tiebreak ranks packed in 4-bit nibbles.
+    The result is category << 20 | tiebreak ranks packed in 4-bit nibbles. Rank counts
+    are added up bitwise across the four suit masks, so nothing is allocated.
     """
-    counts = np.zeros(13, np.int64)
-    suit_masks = np.zeros(4, np.int64)
-    rank_mask = 0
+    s0 = 0
+    s1 = 0
+    s2 = 0
+    s3 = 0
     for c in cards:
-        r = c >> 2
-        counts[r] += 1
-        suit_masks[c & 3] |= 1 << r
-        rank_mask |= 1 << r
+        bit = 1 << (c >> 2)
+        s = c & 3
+        if s == 0:
+            s0 |= bit
+        elif s == 1:
+            s1 |= bit
+        elif s == 2:
+            s2 |= bit
+        else:
+            s3 |= bit
 
-    flush_suit = -1
-    for s in range(4):
-        if _popcount(suit_masks[s]) >= 5:
-            flush_suit = s
-    if flush_suit >= 0:
-        high = _straight_high(suit_masks[flush_suit])
+    flush_mask = 0
+    if _popcount(s0) >= 5:
+        flush_mask = s0
+    elif _popcount(s1) >= 5:
+        flush_mask = s1
+    elif _popcount(s2) >= 5:
+        flush_mask = s2
+    elif _popcount(s3) >= 5:
+        flush_mask = s3
+    if flush_mask:
+        high = _straight_high(flush_mask)
         if high >= 0:
             return (8 << 20) | (high << 16)
 
-    quad = -1
-    trips1 = -1
-    trips2 = -1
-    pair1 = -1
-    pair2 = -1
-    for r in range(12, -1, -1):
-        n = counts[r]
-        if n == 4 and quad < 0:
-            quad = r
-        elif n == 3:
-            if trips1 < 0:
-                trips1 = r
-            elif trips2 < 0:
-                trips2 = r
-        elif n == 2:
-            if pair1 < 0:
-                pair1 = r
-            elif pair2 < 0:
-                pair2 = r
+    a = s0 ^ s1
+    b = s0 & s1
+    c = s2 ^ s3
+    d = s2 & s3
+    ones = a ^ c
+    carry = a & c
+    twos = b ^ d ^ carry
+    quads = (b & d) | (carry & (b ^ d))
+    trips = twos & ones
+    pairs = twos & ~ones
+    rank_mask = s0 | s1 | s2 | s3
 
-    if quad >= 0:
-        return (7 << 20) | (quad << 16) | (_top_ranks(rank_mask & ~(1 << quad), 1) << 12)
-    if trips1 >= 0 and (trips2 >= 0 or pair1 >= 0):
-        return (6 << 20) | (trips1 << 16) | (max(trips2, pair1) << 12)
-    if flush_suit >= 0:
-        return (5 << 20) | _top_ranks(suit_masks[flush_suit], 5)
+    if quads:
+        q = _high_bit(quads)
+        return (7 << 20) | (q << 16) | (_top_ranks(rank_mask & ~(1 << q), 1) << 12)
+    if trips:
+        t = _high_bit(trips)
+        rest = (trips & ~(1 << t)) | pairs
+        if rest:
+            return (6 << 20) | (t << 16) | (_high_bit(rest) << 12)
+    if flush_mask:
+        return (5 << 20) | _top_ranks(flush_mask, 5)
     high = _straight_high(rank_mask)
     if high >= 0:
         return (4 << 20) | (high << 16)
-    if trips1 >= 0:
-        return (3 << 20) | (trips1 << 16) | (_top_ranks(rank_mask & ~(1 << trips1), 2) << 8)
-    if pair2 >= 0:
-        kicker = _top_ranks(rank_mask & ~(1 << pair1) & ~(1 << pair2), 1)
-        return (2 << 20) | (pair1 << 16) | (pair2 << 12) | (kicker << 8)
-    if pair1 >= 0:
-        return (1 << 20) | (pair1 << 16) | (_top_ranks(rank_mask & ~(1 << pair1), 3) << 4)
+    if trips:
+        t = _high_bit(trips)
+        return (3 << 20) | (t << 16) | (_top_ranks(rank_mask & ~(1 << t), 2) << 8)
+    if pairs:
+        p1 = _high_bit(pairs)
+        rest = pairs & ~(1 << p1)
+        if rest:
+            p2 = _high_bit(rest)
+            kicker = _top_ranks(rank_mask & ~(1 << p1) & ~(1 << p2), 1)
+            return (2 << 20) | (p1 << 16) | (p2 << 12) | (kicker << 8)
+        return (1 << 20) | (p1 << 16) | (_top_ranks(rank_mask & ~(1 << p1), 3) << 4)
     return _top_ranks(rank_mask, 5)
 
 
