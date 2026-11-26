@@ -36,7 +36,7 @@ def test_compiled_tables_are_zero_sum():
 
 def test_evolution_runs_and_saves_a_model(tmp_path):
     champion, history, meta = evolve(
-        population=100, generations=2, hands=40, rounds=2, out=tmp_path, finalists=5, playoff_tables=4, playoff_hands=50, log=lambda _: None
+        population=100, generations=2, hands=40, out=tmp_path, finalists=5, playoff_tables=4, playoff_hands=50, log=lambda _: None
     )
     assert len(history) == 2
     assert np.allclose(load_model(tmp_path / "evolved.json"), champion, atol=1e-4)

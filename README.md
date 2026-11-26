@@ -91,7 +91,58 @@ The grids show how often each hand goes in. Hands that sit near 0% or 100% are c
 | 15bb | 16.0% | 20.7% | 28.0% | 43.6% | 28.8% |
 | 25bb | 11.2% | 14.2% | 19.7% | 34.7% | 20.1% |
 
+## 5. A trained bot: 10,000 bots evolved in a league
+
+[pokerbot/strategy.py](pokerbot/strategy.py) describes a whole limit hold'em strategy with 10 numbers: preflop raise and call thresholds, how much each extra bet raises them, a position bonus, postflop bet, raise and call thresholds, and a bluff frequency. [pokerbot/fastsim.py](pokerbot/fastsim.py) is a compiled copy of the game engine in which every seat plays one of these strategies, running about 75,000 hands a second on 16 cores. [pokerbot/evolve.py](pokerbot/evolve.py) trains them with a genetic algorithm:
+
+1. Start 10,000 bots with random settings, which covers everything from calling stations to maniacs.
+2. Each generation, each bot plays 750 hands at three kinds of tables: other population members only, four members plus one league opponent, and alone against four copies of one league opponent. The league holds fixed playing styles (station, maniac, rock, TAG, pot-odds), every earlier generation's best bot, and fresh random bots.
+3. The top 5% survive. The rest are replaced by children of tournament-selected parents, made by crossover plus mutation.
+4. After 50 generations, the 50 best bots and the 10 latest generation champions play 40,000 hands against each opponent pool. The winner is the bot whose worst matchup is best.
+
+The league is there because a first run without it evolved a single aggressive style. Its champion beat five of the six hand-written bots but lost 68 bb/100 to a table of maniacs, because nothing left in the population punished it for folding too much under pressure.
+
+```bash
+pokerbot evolve --population 10000 --generations 50 --out runs/league --install   # about 2 hours on 16 cores
+pokerbot benchmark evolved --baselines tag maniac -n 300000
+```
+
+![Training curves](docs/img/evolution.png)
+
+The left chart shows the generation's best bot measured on only 10,000 hands, so the lines are noisy. The final pick is made by the 40,000-hand playoff. The right chart shows the population settling on a strategy of raising or folding preflop, betting when checked to, and calling postflop only with a clear margin over the pot odds.
+
+**Held-out test.** The trained model ships as [pokerbot/data/evolved.json](pokerbot/data/evolved.json) and plays as the `evolved` bot. It is tested in the regular Python engine against the hand-written bots from section 2, which are separate code from the training league. Each cell is 300,000 hands with a 95% confidence interval. Every cell sits at the same table with the same opponents, so the columns compare directly:
+
+| opponents | evolved | tag | maniac |
+| --- | ---: | ---: | ---: |
+| 4 × tag | **+26.8 ± 1.5** | +0.3 ± 0.9 | −78.0 ± 2.7 |
+| 4 × rock | **+53.0 ± 0.6** | +17.1 ± 0.4 | +48.8 ± 1.0 |
+| 4 × maniac | **+99.6 ± 5.7** | +41.3 ± 3.5 | −0.0 ± 10.7 |
+| 4 × station | +161.6 ± 3.5 | +112.4 ± 2.3 | +166.7 ± 3.8 |
+| 4 × math | **+50.5 ± 2.8** | +7.5 ± 2.0 | −164.0 ± 4.7 |
+| 4 × random | +231.8 ± 3.0 | +48.9 ± 1.7 | +643.0 ± 4.4 |
+| tag, rock, maniac, station | **+170.1 ± 4.0** | +75.3 ± 2.7 | +95.0 ± 6.1 |
+
+The trained bot wins against every opponent, and every interval is far from zero. It beats the hand-written TAG in every lineup and the maniac in five of seven. The maniac still does better against pure calling stations and random bots, because it bets more into opponents who never fold correctly.
+
+The trained genes:
+
+| gene | value | meaning |
+| --- | ---: | --- |
+| pf_raise | 0.87 | opens with a raise on any hand with at least 87% of a fair share of equity |
+| pf_call | 1.96 | almost never just calls an unraised pot: raise or fold |
+| pf_reraise_step | 0.52 | each extra bet raises the bar for re-raising |
+| pf_call_raised | 0.85 | defends raised pots wide, since the pot odds are good |
+| bet | 1.00 | bets when checked to with an above-average hand |
+| bluff | 0.20 | bluffs 20% of the time when checked to |
+| raise | 1.82 | raises a bet only with nearly twice its fair share of equity |
+| call_margin | 0.12 | calls a bet only when equity beats the pot odds by 12 points |
+| raised_margin | 0.09 | needs 9 more points of equity for each extra bet |
+| position | −0.09 | barely uses position |
+
 ## Caveats
+
+- The "edge" is measured against bots in this simulator. Real players adapt, read betting patterns, and don't play from fixed thresholds, so these win rates say nothing about a real table. Running a bot on real-money poker sites also breaks their terms of service.
 
 - Bots estimate equity against random hands, not against what their opponents' actions say they hold. That is the obvious next upgrade.
 - CFR is only guaranteed to find a Nash equilibrium in two-player zero-sum games. In 5-player push/fold it converges to a stable, sensible strategy, but that is an empirical result, not a theorem.
@@ -109,6 +160,9 @@ pokerbot/
   bots.py         rule-based bots
   simulate.py     multi-process tournament runner and stats
   pushfold.py     CFR+ push/fold solver
+  strategy.py     10-number genome strategy and the EvolvedBot
+  fastsim.py      compiled engine for training genomes
+  evolve.py       league genetic algorithm
   charts.py       matplotlib charts
   cli.py          the `pokerbot` command
 tests/            evaluator vs brute force, equity sanity, engine zero-sum, solver ranges

@@ -105,6 +105,32 @@ def stack_sweep_chart(path, sweep):
     plt.close(fig)
 
 
+def evolution_chart(path, history):
+    from .strategy import GENES
+
+    gens = [h["generation"] for h in history]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.8))
+    ax1.plot(gens, [h["best_matchups"]["random bots"] for h in history], label="best bot vs fresh random bots", alpha=0.8)
+    ax1.plot(gens, [h["best_worst_matchup"] for h in history], label="best bot, its worst matchup", alpha=0.8)
+    ax1.plot(gens, [h["top10pct_fitness"] for h in history], label="top 10% fitness in the league")
+    ax1.axhline(0, color="black", linewidth=0.8)
+    ax1.set_xlabel("generation")
+    ax1.set_ylabel("bb/100")
+    ax1.set_title(f"Training {len(history)} generations of {history[0].get('population', 10_000):,} bots")
+    ax1.grid(alpha=0.3)
+    ax1.legend()
+    for name, low, high, _ in GENES:
+        ax2.plot(gens, [(h["mean"][name] - low) / (high - low) for h in history], label=name)
+    ax2.set_xlabel("generation")
+    ax2.set_ylabel("population mean (0 = low end of range, 1 = high end)")
+    ax2.set_title("What the population learned")
+    ax2.grid(alpha=0.3)
+    ax2.legend(fontsize=7, ncol=2)
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
 def make_all(outdir="docs/img", sim_stats=None, iterations=20_000_000, sweep_iterations=10_000_000):
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
