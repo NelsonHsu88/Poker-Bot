@@ -87,4 +87,11 @@ class PotOddsBot(Bot):
         return "c" if obs.equity() > obs.pot_odds else "f"
 
 
+def _evolved_bot():
+    from .strategy import EvolvedBot
+
+    return EvolvedBot()
+
+
 BOTS = {cls.name: cls for cls in (TightAggressive, Rock, Maniac, CallingStation, RandomBot, PotOddsBot)}
+BOTS["evolved"] = _evolved_bot

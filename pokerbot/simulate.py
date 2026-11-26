@@ -76,6 +76,21 @@ def _run_chunk(args):
     return stats
 
 
+def benchmark(bot, baselines=("tag",), opponents=("tag", "rock", "maniac", "station", "math", "random"), hands=200_000, workers=1, seed=0):
+    """bb/100 of `bot` and each baseline at the same tables: alone against 4 copies of each opponent, then a mixed table."""
+    lineups = [(opp, [opp] * 4) for opp in opponents]
+    lineups.append(("mixed table", ["tag", "rock", "maniac", "station"]))
+    rows = []
+    for title, others in lineups:
+        row = {"opponents": title}
+        for name in (bot, *baselines):
+            stats = simulate([name, *others], hands, workers, seed)
+            s = next(s for s in stats if s.label == name or s.label == f"{name}#1")
+            row[name] = f"{s.bb_per_100:+.1f} ± {s.ci95:.1f}"
+        rows.append(row)
+    return rows
+
+
 def simulate(names, hands=100_000, workers=1, seed=0, chunk=5_000):
     """Play bots against each other, reshuffling seats every chunk so nobody keeps a lucky seat."""
     unknown = [n for n in names if n not in BOTS]
